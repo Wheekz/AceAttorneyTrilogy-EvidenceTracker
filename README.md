@@ -2,6 +2,8 @@
 
 A small quality-of-life mod for **Phoenix Wright: Ace Attorney Trilogy** (Steam, PC and Steam Deck).
 
+> **Investigation phases only.** Trials are not touched: nothing changes during cross-examinations or when you present evidence in court, so the courtroom challenge stays exactly as the game intended.
+
 During **investigations**, when you open the Court Record to **present** something to a character, the mod marks the evidence and profiles you have already shown to that character:
 
 | Mark | Meaning |
@@ -12,7 +14,7 @@ During **investigations**, when you open the Court Record to **present** somethi
 
 The answer is computed **without playing it**, from the same table the game uses (`tantei_show_check`), so the marks follow the game's own logic: an item that did nothing earlier gets a star as soon as it unlocks something. A character keeps their history when they move to another location.
 
-Court phases and simply browsing the Court Record are not affected.
+Simply browsing the Court Record is not affected either: the marks only appear when you are about to present something to a character.
 
 ![Green check badges on evidence already shown, gold star on evidence with a new answer](docs/screenshot.jpg)
 
@@ -82,4 +84,4 @@ MIT, see [LICENSE](LICENSE). This mod contains no game files; Phoenix Wright: Ac
 
 ## 🇫🇷 En bref
 
-En **enquête**, quand tu ouvres le dossier pour **présenter** quelque chose à un personnage, le mod marque ce que tu lui as déjà montré : **coche verte + (déjà vu)** = même réponse qu'avant ; **étoile dorée + (nouveau !)** = la réponse a changé, un nouveau dialogue est débloqué. L'historique suit **ta sauvegarde** (nouvelle partie = vierge). Installation : extraire le zip **AIO** (BepInEx inclus) dans le dossier du jeu ; sur Steam Deck, ajouter `WINEDLLOVERRIDES="winhttp=n,b" %command%` aux options de lancement.
+**Phases d'enquête uniquement** : les procès ne sont pas touchés (contre-interrogatoires et présentations au tribunal restent tels quels). En **enquête**, quand tu ouvres le dossier pour **présenter** quelque chose à un personnage, le mod marque ce que tu lui as déjà montré : **coche verte + (déjà vu)** = même réponse qu'avant ; **étoile dorée + (nouveau !)** = la réponse a changé, un nouveau dialogue est débloqué. L'historique suit **ta sauvegarde** (nouvelle partie = vierge). Installation : extraire le zip **AIO** (BepInEx inclus) dans le dossier du jeu ; sur Steam Deck, ajouter `WINEDLLOVERRIDES="winhttp=n,b" %command%` aux options de lancement.
