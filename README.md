@@ -14,6 +14,8 @@ The answer is computed **without playing it**, from the same table the game uses
 
 Court phases and simply browsing the Court Record are not affected.
 
+![Green check badges on evidence already shown, gold star on evidence with a new answer](docs/screenshot.jpg)
+
 ### History follows your save
 
 - The history is kept with **your save slot**: saving writes it next to the slot, loading brings it back.
