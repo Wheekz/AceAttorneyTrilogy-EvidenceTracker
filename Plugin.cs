@@ -16,7 +16,7 @@ namespace PWAAT_QoL
     ///  - réponse différente (nouveau dialogue débloqué) -> icône dorée + « (nouvelle réaction !) »
     /// La réponse est calculée sans la déclencher via GSMain_Status.tantei_show_check (fonction pure).
     /// </summary>
-    [BepInPlugin("wheekz.pwaat.qol", "PWAAT QoL", "0.2.0")]
+    [BepInPlugin("wheekz.pwaat.qol", "PWAAT QoL", "0.2.1")]
     public class Plugin : BaseUnityPlugin
     {
         internal static ManualLogSource Log;
@@ -65,11 +65,9 @@ namespace PWAAT_QoL
             return $"{g.title}|{g.scenario}|";
         }
 
-        internal static string Key(int item, int kind)
-        {
-            var g = GSStatic.global_work_;
-            return $"{ChapterPrefix()}{g.Room}|{Character}|{kind}|{item}";
-        }
+        /// Pas de lieu dans la clé : un perso qui change d'endroit garde son historique,
+        /// et une réponse différente ailleurs s'affiche en « nouveau » (cas réel : Maya, GS1 ch.2).
+        internal static string Key(int item, int kind) => $"{ChapterPrefix()}{Character}|{kind}|{item}";
 
         internal static Mark Evaluate(int noteId, int kind, out uint response)
         {
