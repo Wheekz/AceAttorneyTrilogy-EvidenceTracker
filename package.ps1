@@ -9,7 +9,7 @@ New-Item -ItemType Directory "$stage\BepInEx\plugins" | Out-Null
 Copy-Item "bin\Release\net35\PWAAT_QoL.dll" "$stage\BepInEx\plugins\"
 Copy-Item README.md, LICENSE $stage
 New-Item -ItemType Directory dist -Force | Out-Null
-$zip = Join-Path (Resolve-Path dist) "PWAAT_QoL-$version.zip"
+$zip = Join-Path (Resolve-Path dist) "AceAttorneyTrilogy-EvidenceTracker-$version.zip"
 Remove-Item $zip -ErrorAction SilentlyContinue
 # Compress-Archive (PS 5.1) écrit des « \ » dans les chemins : illisibles sous Linux / Steam Deck. On construit l'archive à la main.
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem

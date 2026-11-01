@@ -16,7 +16,7 @@ namespace PWAAT_QoL
     ///  - réponse différente (nouveau dialogue débloqué) -> icône dorée + « (nouvelle réaction !) »
     /// La réponse est calculée sans la déclencher via GSMain_Status.tantei_show_check (fonction pure).
     /// </summary>
-    [BepInPlugin("wheekz.pwaat.qol", "PWAAT QoL", "0.2.1")]
+    [BepInPlugin("wheekz.pwaat.qol", "PWAAT QoL", "0.3.0")]
     public class Plugin : BaseUnityPlugin
     {
         internal static ManualLogSource Log;
@@ -255,15 +255,169 @@ namespace PWAAT_QoL
         private static readonly AccessTools.FieldRef<recordListCtrl, List<recordListCtrl.RecordIcon>> SubList =
             AccessTools.FieldRefAccess<recordListCtrl, List<recordListCtrl.RecordIcon>>("record_sub_list_");
 
-        internal static readonly Color Dim = new Color(0.45f, 0.45f, 0.45f, 0.55f);
-        internal static readonly Color Gold = new Color(1f, 0.85f, 0.35f, 1f);
-
         private static void Postfix(recordListCtrl __instance, int in_id, int in_no, bool is_sub)
         {
             var list = is_sub ? SubList(__instance) : DispList(__instance);
             if (list == null || in_no < 0 || in_no >= list.Count) return;
             var mark = Ctx.Evaluate(in_id, __instance.record_type, out _);
-            list[in_no].icon_.color = mark == Mark.Seen ? Dim : mark == Mark.New ? Gold : Color.white;
+            list[in_no].icon_.color = Color.white; // annule la teinte des versions précédentes
+            Badges.Show(list[in_no].icon_, mark);
+        }
+    }
+
+    /// <summary>Pastilles superposées au coin haut-droit des icônes : coche verte (déjà vu) / étoile (nouveau).</summary>
+    internal static class Badges
+    {
+        private const string Name = "QoLBadge";
+        private const float SizeRatio = 0.42f;
+        private static Sprite _check, _star;
+
+        internal static void Show(AssetBundleSprite icon, Mark mark)
+        {
+            var host = icon.obj;
+            if (host == null) return;
+            var existing = host.transform.Find(Name);
+            if (mark == Mark.None)
+            {
+                if (existing != null) existing.gameObject.SetActive(false);
+                return;
+            }
+            var sprite = mark == Mark.Seen ? (_check ?? (_check = Draw(DrawCheck))) : (_star ?? (_star = Draw(DrawStar)));
+            try
+            {
+                if (icon.sprite_renderer_ != null) ShowOnRenderer(icon.sprite_renderer_, existing, sprite);
+                else if (icon.image_ != null) ShowOnImage(icon.image_, existing, sprite);
+            }
+            catch (Exception e) { Plugin.Log.LogWarning("Pastille : " + e.Message); }
+        }
+
+        private static void ShowOnRenderer(SpriteRenderer host, Transform existing, Sprite sprite)
+        {
+            if (host.sprite == null) { if (existing != null) existing.gameObject.SetActive(false); return; }
+            GameObject go;
+            SpriteRenderer sr;
+            if (existing == null)
+            {
+                go = new GameObject(Name);
+                go.layer = host.gameObject.layer;
+                go.transform.SetParent(host.transform, false);
+                sr = go.AddComponent<SpriteRenderer>();
+            }
+            else { go = existing.gameObject; sr = go.GetComponent<SpriteRenderer>(); }
+            sr.sprite = sprite;
+            sr.sortingLayerID = host.sortingLayerID;
+            sr.sortingOrder = host.sortingOrder + 10;
+            sr.maskInteraction = host.maskInteraction;
+            // Taille/position en coordonnées locales de l'icône (le sprite de pastille fait 1 unité).
+            var b = host.sprite.bounds;
+            float size = Mathf.Min(b.size.x, b.size.y) * SizeRatio;
+            go.transform.localScale = new Vector3(size, size, 1f);
+            go.transform.localPosition = new Vector3(b.max.x - size * 0.4f, b.max.y - size * 0.4f, -0.01f);
+            go.SetActive(true);
+        }
+
+        private static void ShowOnImage(Image host, Transform existing, Sprite sprite)
+        {
+            GameObject go;
+            Image img;
+            if (existing == null)
+            {
+                go = new GameObject(Name, typeof(RectTransform));
+                go.layer = host.gameObject.layer;
+                go.transform.SetParent(host.transform, false);
+                img = go.AddComponent<Image>();
+                img.raycastTarget = false;
+            }
+            else { go = existing.gameObject; img = go.GetComponent<Image>(); }
+            img.sprite = sprite;
+            var parent = host.rectTransform.rect;
+            float size = Mathf.Min(parent.width, parent.height) * SizeRatio;
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(size, size);
+            rt.anchoredPosition = new Vector2(-size * 0.4f, -size * 0.4f);
+            go.transform.SetAsLastSibling();
+            go.SetActive(true);
+        }
+
+        // ---------- Dessin procédural (64 px, bords adoucis) ----------
+
+        private const int Px = 64;
+
+        private static Sprite Draw(Func<float, float, Color> shader)
+        {
+            var tex = new Texture2D(Px, Px, TextureFormat.ARGB32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color[Px * Px];
+            for (int y = 0; y < Px; y++)
+                for (int x = 0; x < Px; x++)
+                    pixels[y * Px + x] = shader((x + 0.5f) / Px, (y + 0.5f) / Px);
+            tex.SetPixels(pixels);
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0, 0, Px, Px), new Vector2(0.5f, 0.5f), Px);
+        }
+
+        private static float Cover(float signedDist) => Mathf.Clamp01(0.5f - signedDist * Px); // 1 px d'adoucissement
+
+        private static Color Over(Color top, float a, Color under)
+        {
+            float outA = a + under.a * (1 - a);
+            if (outA <= 0f) return new Color(0, 0, 0, 0);
+            Color c = (top * a + under * under.a * (1 - a)) / outA;
+            c.a = outA;
+            return c;
+        }
+
+        private static float SegDist(Vector2 p, Vector2 a, Vector2 b)
+        {
+            var ab = b - a;
+            float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
+            return (p - (a + ab * t)).magnitude;
+        }
+
+        private static Color DrawCheck(float x, float y)
+        {
+            var p = new Vector2(x, y);
+            float d = (p - new Vector2(0.5f, 0.5f)).magnitude;
+            var c = new Color(0, 0, 0, 0);
+            c = Over(new Color(1f, 1f, 1f), Cover(d - 0.48f), c);                          // liseré blanc
+            c = Over(new Color(0.16f, 0.66f, 0.29f), Cover(d - 0.42f), c);                 // disque vert
+            float stroke = Mathf.Min(SegDist(p, new Vector2(0.27f, 0.51f), new Vector2(0.44f, 0.34f)),
+                                     SegDist(p, new Vector2(0.44f, 0.34f), new Vector2(0.74f, 0.67f)));
+            c = Over(Color.white, Cover(stroke - 0.065f), c);                                // coche
+            return c;
+        }
+
+        private static readonly Vector2[] StarPts = BuildStar();
+
+        private static Vector2[] BuildStar()
+        {
+            var pts = new Vector2[10];
+            for (int i = 0; i < 10; i++)
+            {
+                float r = i % 2 == 0 ? 0.47f : 0.21f;
+                float ang = Mathf.PI / 2f + i * Mathf.PI / 5f;
+                pts[i] = new Vector2(0.5f + r * Mathf.Cos(ang), 0.47f + r * Mathf.Sin(ang));
+            }
+            return pts;
+        }
+
+        private static Color DrawStar(float x, float y)
+        {
+            var p = new Vector2(x, y);
+            bool inside = false;
+            float edge = float.MaxValue;
+            for (int i = 0, j = StarPts.Length - 1; i < StarPts.Length; j = i++)
+            {
+                var a = StarPts[i]; var b = StarPts[j];
+                if ((a.y > y) != (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+                edge = Mathf.Min(edge, SegDist(p, a, b));
+            }
+            float sd = inside ? -edge : edge;
+            var c = new Color(0, 0, 0, 0);
+            c = Over(new Color(0.45f, 0.24f, 0.02f), Cover(sd - 0.035f), c);               // contour brun
+            c = Over(new Color(1f, 0.80f, 0.15f), Cover(sd + 0.01f), c);                   // étoile dorée
+            return c;
         }
     }
 
@@ -283,8 +437,9 @@ namespace PWAAT_QoL
             var mark = Ctx.Evaluate(__instance.note_id, __instance.record_type, out uint resp);
             // Une seule ligne quand on ajoute une marque : sinon le suffixe passe à la ligne et il est masqué.
             label.horizontalOverflow = mark == Mark.None ? _originalWrap.Value : HorizontalWrapMode.Overflow;
-            if (mark == Mark.Seen) label.text += " <color=#9a9a9a>" + Labels.Get(mark) + "</color>";
-            else if (mark == Mark.New) label.text += " <color=#d08a00>" + Labels.Get(mark) + "</color>";
+            // Couleurs foncées : lisibles sur le bandeau jaune du nom.
+            if (mark == Mark.Seen) label.text += " <color=#2f6e3a>" + Labels.Get(mark) + "</color>";
+            else if (mark == Mark.New) label.text += " <color=#a3301b>" + Labels.Get(mark) + "</color>";
             if (Plugin.Verbose.Value && Ctx.PresentingInInvestigation)
                 Plugin.Log.LogInfo($"[curseur] objet={__instance.note_id} type={__instance.record_type} -> réponse {resp} ({mark})");
         }

@@ -1,26 +1,24 @@
-# PWAAT QoL — Presented evidence tracker
+# Ace Attorney Trilogy: Evidence Tracker
 
-A small quality-of-life mod for **Phoenix Wright: Ace Attorney Trilogy** (Steam, PC & Steam Deck).
+A small quality-of-life mod for **Phoenix Wright: Ace Attorney Trilogy** (Steam, PC and Steam Deck).
 
 During **investigations**, when you open the Court Record to **present** something to a character, the mod marks the evidence and profiles you have already shown to that character:
 
 | Mark | Meaning |
 |---|---|
-| Greyed-out icon + **(shown)** | Already presented to this character, and they would give you **the same answer** again. No need to try it a third time. |
-| Golden icon + **(new!)** | Already presented, but **the answer has changed** since — the story moved on and a new dialogue is unlocked. Worth trying again! |
-| Normal icon | Never presented to this character here. |
+| Green check badge + **(shown)** | Already presented to this character, and they would give you **the same answer** again. No need to try it a third time. |
+| Gold star badge + **(new!)** | Already presented, but **the answer has changed** since: the story moved on and a new dialogue is unlocked. Worth trying again! |
+| No badge | Never presented to this character. |
 
-The answer is computed **without playing it**, from the same table the game uses (`tantei_show_check`), so the marks follow the game's own logic: an item that did nothing earlier will turn golden as soon as it unlocks something.
+The answer is computed **without playing it**, from the same table the game uses (`tantei_show_check`), so the marks follow the game's own logic: an item that did nothing earlier gets a star as soon as it unlocks something. A character keeps their history when they move to another location.
 
 Court phases and simply browsing the Court Record are not affected.
-
-![Greyed-out evidence and "(shown)" label](docs/screenshot_shown.jpg)
 
 ### History follows your save
 
 - The history is kept with **your save slot**: saving writes it next to the slot, loading brings it back.
 - **New game** (or episode select) starts with an empty history.
-- Quitting without saving loses the presentations made since the last save — exactly like the rest of your progress.
+- Quitting without saving loses the presentations made since the last save, exactly like the rest of your progress.
 - `Ctrl+F10` clears the history of the current chapter (for the game in progress).
 
 Labels are shown in the game's language (English, French, German, Japanese, Korean, Chinese simplified/traditional, Brazilian Portuguese, Latin American Spanish).
@@ -75,10 +73,10 @@ Edit `GameDir` in `PWAAT_QoL.csproj` to point to your install; the DLL is copied
 
 ## License
 
-MIT — see [LICENSE](LICENSE). This mod contains no game files; Phoenix Wright: Ace Attorney is © CAPCOM.
+MIT, see [LICENSE](LICENSE). This mod contains no game files; Phoenix Wright: Ace Attorney is © CAPCOM.
 
 ---
 
 ## 🇫🇷 En bref
 
-En **enquête**, quand tu ouvres le dossier pour **présenter** quelque chose à un personnage, le mod marque ce que tu lui as déjà montré : **grisé + (déjà vu)** = même réponse qu'avant ; **doré + (nouveau !)** = la réponse a changé, un nouveau dialogue est débloqué. L'historique suit **ta sauvegarde** (nouvelle partie = vierge). Installation : BepInEx 5 **x86**, puis la DLL dans `BepInEx/plugins` ; sur Steam Deck, ajouter `WINEDLLOVERRIDES="winhttp=n,b" %command%` aux options de lancement.
+En **enquête**, quand tu ouvres le dossier pour **présenter** quelque chose à un personnage, le mod marque ce que tu lui as déjà montré : **coche verte + (déjà vu)** = même réponse qu'avant ; **étoile dorée + (nouveau !)** = la réponse a changé, un nouveau dialogue est débloqué. L'historique suit **ta sauvegarde** (nouvelle partie = vierge). Installation : BepInEx 5 **x86**, puis la DLL dans `BepInEx/plugins` ; sur Steam Deck, ajouter `WINEDLLOVERRIDES="winhttp=n,b" %command%` aux options de lancement.
