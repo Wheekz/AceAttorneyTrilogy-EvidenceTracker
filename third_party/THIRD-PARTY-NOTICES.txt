@@ -1,0 +1,19 @@
+The "all-in-one" package of Ace Attorney Trilogy - Evidence Tracker bundles
+BepInEx 5.4.23.6 (win_x86), unmodified, so that the mod can be installed in one step.
+
+BepInEx
+  https://github.com/BepInEx/BepInEx
+  MIT License, see BepInEx-LICENSE.txt
+
+Components shipped inside the BepInEx package:
+  UnityDoorstop (winhttp.dll, doorstop_config.ini, .doorstop_version)
+    https://github.com/NeighTools/UnityDoorstop
+    GNU Lesser General Public License v2.1. The source code is available at the URL above.
+  HarmonyX (0Harmony.dll, 0Harmony20.dll, HarmonyXInterop.dll)
+    https://github.com/BepInEx/HarmonyX  (MIT License)
+  MonoMod (MonoMod.RuntimeDetour.dll, MonoMod.Utils.dll)
+    https://github.com/MonoMod/MonoMod  (MIT License)
+  Mono.Cecil (Mono.Cecil*.dll)
+    https://github.com/jbevain/cecil  (MIT License)
+
+The mod-only package contains none of these files.

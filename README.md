@@ -27,22 +27,23 @@ Labels are shown in the game's language (English, French, German, Japanese, Kore
 
 ## Installation
 
-Requires **[BepInEx 5](https://github.com/BepInEx/BepInEx/releases)** (tested with 5.4.23.6).
-The game is a **32-bit** build: use **`BepInEx_win_x86_5.4.23.x.zip`** (the x64 package will not load).
+### Easy install (recommended)
 
-### Windows
+Download **`AceAttorneyTrilogy-EvidenceTracker-<version>-AIO.zip`** ("all-in-one": BepInEx is already included).
 
-1. Extract `BepInEx_win_x86_5.4.23.x.zip` into the game folder (the one containing `PWAAT.exe`).
-2. Extract this mod's zip into the same folder: it only adds `BepInEx/plugins/PWAAT_QoL.dll`.
-3. Start the game.
-
-### Steam Deck / Linux (Proton)
-
-1. Same two steps as Windows (the game runs through Proton, so it is still the **Windows x86** BepInEx).
-2. In Steam: game **Properties → General → Launch Options**, paste:
+1. In Steam, right-click the game, **Manage, Browse local files**: this opens the game folder (the one containing `PWAAT.exe`).
+2. Extract the zip **into that folder**.
+3. **Windows**: done, start the game.
+   **Steam Deck / Linux**: one more step. In Steam, game **Properties, General, Launch Options**, paste:
    ```
    WINEDLLOVERRIDES="winhttp=n,b" %command%
    ```
+   (Proton needs this to load the mod loader. Without it, the game starts without the mod.)
+
+### Manual install (if you already use BepInEx)
+
+Download **`...-ModOnly.zip`** and extract it into the game folder: it only adds `BepInEx/plugins/PWAAT_QoL.dll`.
+It needs **[BepInEx 5](https://github.com/BepInEx/BepInEx/releases)** (tested with 5.4.23.6). The game is a **32-bit** build: use **`BepInEx_win_x86`**, the x64 package will not load. Steam Deck: same launch option as above.
 
 ### Uninstall
 
@@ -81,4 +82,4 @@ MIT, see [LICENSE](LICENSE). This mod contains no game files; Phoenix Wright: Ac
 
 ## 🇫🇷 En bref
 
-En **enquête**, quand tu ouvres le dossier pour **présenter** quelque chose à un personnage, le mod marque ce que tu lui as déjà montré : **coche verte + (déjà vu)** = même réponse qu'avant ; **étoile dorée + (nouveau !)** = la réponse a changé, un nouveau dialogue est débloqué. L'historique suit **ta sauvegarde** (nouvelle partie = vierge). Installation : BepInEx 5 **x86**, puis la DLL dans `BepInEx/plugins` ; sur Steam Deck, ajouter `WINEDLLOVERRIDES="winhttp=n,b" %command%` aux options de lancement.
+En **enquête**, quand tu ouvres le dossier pour **présenter** quelque chose à un personnage, le mod marque ce que tu lui as déjà montré : **coche verte + (déjà vu)** = même réponse qu'avant ; **étoile dorée + (nouveau !)** = la réponse a changé, un nouveau dialogue est débloqué. L'historique suit **ta sauvegarde** (nouvelle partie = vierge). Installation : extraire le zip **AIO** (BepInEx inclus) dans le dossier du jeu ; sur Steam Deck, ajouter `WINEDLLOVERRIDES="winhttp=n,b" %command%` aux options de lancement.
