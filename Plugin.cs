@@ -16,7 +16,7 @@ namespace PWAAT_QoL
     ///  - réponse différente (nouveau dialogue débloqué) -> icône dorée + « (nouvelle réaction !) »
     /// La réponse est calculée sans la déclencher via GSMain_Status.tantei_show_check (fonction pure).
     /// </summary>
-    [BepInPlugin("wheekz.pwaat.qol", "PWAAT QoL", "0.3.0")]
+    [BepInPlugin("wheekz.pwaat.qol", "PWAAT QoL", "0.4.0")]
     public class Plugin : BaseUnityPlugin
     {
         internal static ManualLogSource Log;
@@ -41,7 +41,7 @@ namespace PWAAT_QoL
         {
             if (ResetKey.Value.IsDown())
             {
-                int n = History.ResetChapter(Ctx.ChapterPrefix());
+                int n = History.ResetChapter(Ctx.CasePrefix(), Chapters.Base(Chapters.StemOfScenario(GSStatic.global_work_.title, GSStatic.global_work_.scenario)));
                 Log.LogInfo($"Historique du chapitre effacé ({n} entrées).");
             }
         }
@@ -59,20 +59,82 @@ namespace PWAAT_QoL
 
         internal static int Character => AnimationSystem.Instance != null ? AnimationSystem.Instance.IdlingCharacterMasked : -1;
 
-        internal static string ChapterPrefix()
+        /// L'historique vaut pour toute l'affaire : d'un jour d'enquête à l'autre, on ne re-présente pas tout.
+        internal static string CasePrefix()
         {
             var g = GSStatic.global_work_;
-            return $"{g.title}|{g.scenario}|";
+            return $"{g.title}|{Chapters.CaseId(g.title, g.scenario)}|";
         }
 
         /// Pas de lieu dans la clé : un perso qui change d'endroit garde son historique,
         /// et une réponse différente ailleurs s'affiche en « nouveau » (cas réel : Maya, GS1 ch.2).
-        internal static string Key(int item, int kind) => $"{ChapterPrefix()}{Character}|{kind}|{item}";
+        internal static string Key(int item, int kind) => $"{CasePrefix()}{Character}|{kind}|{item}";
+
+        /// Le jeu remplace une preuve mise à jour par une autre fiche (même nom, même icône, autre identifiant) :
+        /// l'historique se lit donc sur toutes les versions de la preuve.
+        internal static HashSet<string> SeenReplies(int noteId, int kind)
+        {
+            HashSet<string> all = null;
+            foreach (var id in EvidenceVersions.Of(noteId))
+            {
+                var seen = Plugin.History.Get(Key(id, kind));
+                if (seen == null) continue;
+                if (all == null) all = new HashSet<string>();
+                all.UnionWith(seen);
+            }
+            return all;
+        }
+
+        /// Une réponse se désigne par son fichier de messages (sans la langue) et son numéro :
+        /// les numéros sont identiques dans toutes les langues, et ils repartent à chaque fichier.
+        internal static string ReplyId(uint message)
+        {
+            string stem = message >= 128 ? Chapters.Stem(GSStatic.message_work_.mdt_path) : "sys";
+            return $"{stem}:{message}";
+        }
+
+        /// Vrai si la table contient une réponse propre à cet objet, faux si le personnage répond par défaut.
+        /// Mêmes parcours et mêmes conditions que tantei_show_check, sans le cas « n'importe quel objet ».
+        internal static bool HasDedicatedReply(uint item, int kind)
+        {
+            var g = GSStatic.global_work_;
+            var table = GSScenario.GetTanteiShowData();
+            int character = Character;
+            int i = 0;
+            if (g.title == TitleId.GS1)
+            {
+                for (; i < table.Length && table[i].end != 255; i++)
+                    if (character == table[i].pl_id && g.Room == table[i].room && item == table[i].item) return true;
+                return false;
+            }
+            for (; i < table.Length && table[i].end != 255 && table[i].room != g.Room; i++) { }
+            for (; i < table.Length && table[i].room == g.Room; i++)
+            {
+                var row = table[i];
+                if (character == row.pl_id && kind == row.end && item == row.item &&
+                    (g.roomseq[g.Room] == row.roomseq || row.roomseq == 255)) return true;
+            }
+            return false;
+        }
+
+        /// Avec des verrous actifs sur ce personnage, le jeu ne consulte pas tantei_show_check pour le Magatama :
+        /// il lance le verrou psychique. C'est donc bien une réaction à tenter.
+        private static bool MagatamaOpensLock(int noteId)
+        {
+            return IsMagatama((byte)noteId) && GSPsylock.is_on_psylock_flag_in_room((ushort)GSStatic.global_work_.Room, (ushort)Character) >= 0;
+        }
+
+        private static readonly System.Reflection.MethodInfo IsMagatamaMethod = AccessTools.Method(typeof(GSMain_Status), "IsMagatama");
+
+        private static bool IsMagatama(byte item) => (bool)IsMagatamaMethod.Invoke(null, new object[] { item });
 
         internal static Mark Evaluate(int noteId, int kind, out uint response)
         {
             response = 0;
             if (!Plugin.Enabled.Value || !PresentingInInvestigation || Character <= 0) return Mark.None;
+            // Pendant le bris des verrous, le jeu compare aux réponses du verrou, pas à tantei_show_check.
+            if (GSStatic.global_work_.psy_menu_active_flag != 0) return Mark.None;
+            if (MagatamaOpensLock(noteId)) return Mark.New;
             try
             {
                 Previewing = true;
@@ -84,21 +146,131 @@ namespace PWAAT_QoL
                 return Mark.None;
             }
             finally { Previewing = false; }
-            var seen = Plugin.History.Get(Key(noteId, kind));
+            var seen = SeenReplies(noteId, kind);
             if (seen == null || seen.Count == 0) return Mark.None;
-            return seen.Contains(response) ? Mark.Seen : Mark.New;
+            // Réponse par défaut : le personnage n'a rien à dire sur cet objet, même si le jeu reformule son refus.
+            if (!HasDedicatedReply((uint)noteId, kind)) return Mark.Seen;
+            return ReplyCoverage.IsCovered(GSStatic.global_work_.title, ReplyId(response), seen) ? Mark.Seen : Mark.New;
+        }
+    }
+
+    /// <summary>Découpage du jeu : un fichier de messages par chapitre, regroupés par affaire (sc2_0, sc2_2b...).</summary>
+    internal static class Chapters
+    {
+        /// "GS3/scenario/sc2_2b_text_f.mdt" -> "sc2_2b"
+        internal static string Stem(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return string.Empty;
+            string name = Path.GetFileName(path);
+            int cut = name.IndexOf("_text", StringComparison.Ordinal);
+            return cut > 0 ? name.Substring(0, cut) : name;
+        }
+
+        /// "sc2_2b" -> "sc2_2" : un même chapitre est parfois réparti sur plusieurs fichiers.
+        internal static string Base(string stem)
+        {
+            if (stem.Length > 1 && char.IsLetter(stem[stem.Length - 1]) && char.IsDigit(stem[stem.Length - 2]))
+                return stem.Substring(0, stem.Length - 1);
+            return stem;
+        }
+
+        internal static string StemOfScenario(TitleId title, int scenario)
+        {
+            var table = GSScenario.GetScenarioMdtPathTable(title);
+            return table != null && scenario >= 0 && scenario < table.Length ? Stem(table[scenario]) : $"sc?{scenario}";
+        }
+
+        /// "sc2_2b" -> "c2"
+        internal static string CaseId(TitleId title, int scenario)
+        {
+            string stem = StemOfScenario(title, scenario);
+            int end = stem.IndexOf('_');
+            string number = stem.StartsWith("sc") ? (end > 2 ? stem.Substring(2, end - 2) : stem.Substring(2)) : stem;
+            return "c" + number;
+        }
+    }
+
+    /// <summary>
+    /// Table précalculée (ReplyCoverage.cs) : « qui a lu la réponse A n'apprend rien de neuf en lisant la réponse B ».
+    /// Elle ne contient que des identifiants, donc elle vaut pour toutes les langues du jeu.
+    /// </summary>
+    internal static class ReplyCoverage
+    {
+        private static readonly Dictionary<TitleId, Dictionary<string, List<string>>> Tables =
+            new Dictionary<TitleId, Dictionary<string, List<string>>>();
+
+        private static Dictionary<string, List<string>> TableOf(TitleId title)
+        {
+            if (Tables.TryGetValue(title, out var table)) return table;
+            table = new Dictionary<string, List<string>>();
+            string data = title == TitleId.GS1 ? ReplyCoverageData.GS1 : title == TitleId.GS2 ? ReplyCoverageData.GS2 : ReplyCoverageData.GS3;
+            foreach (var link in data.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                int sep = link.IndexOf('>');
+                if (sep <= 0) continue;
+                string covered = link.Substring(sep + 1);
+                if (!table.TryGetValue(covered, out var sources)) table[covered] = sources = new List<string>();
+                sources.Add(link.Substring(0, sep));
+            }
+            return Tables[title] = table;
+        }
+
+        /// Les présentations des anciennes versions du mod ne connaissent que le chapitre, pas le fichier exact :
+        /// elles sont enregistrées sous la forme "sc2_2*:283".
+        private static string LegacyForm(string replyId)
+        {
+            int sep = replyId.IndexOf(':');
+            return sep <= 0 ? replyId : Chapters.Base(replyId.Substring(0, sep)) + "*" + replyId.Substring(sep);
+        }
+
+        private static bool Known(string replyId, HashSet<string> seen) => seen.Contains(replyId) || seen.Contains(LegacyForm(replyId));
+
+        internal static bool IsCovered(TitleId title, string replyId, HashSet<string> seen)
+        {
+            if (Known(replyId, seen)) return true;
+            if (!TableOf(title).TryGetValue(replyId, out var sources)) return false;
+            foreach (var source in sources)
+                if (Known(source, seen)) return true;
+            return false;
+        }
+    }
+
+    /// <summary>Fiches du jeu qui sont les versions d'une même preuve (même nom, même icône, même type).</summary>
+    internal static class EvidenceVersions
+    {
+        private static readonly Dictionary<int, int[]> Cache = new Dictionary<int, int[]>();
+        private static string _cacheOwner;
+
+        internal static int[] Of(int noteId)
+        {
+            var g = GSStatic.global_work_;
+            string owner = $"{g.title}|{g.language}";
+            if (owner != _cacheOwner) { Cache.Clear(); _cacheOwner = owner; }
+            if (Cache.TryGetValue(noteId, out var versions)) return versions;
+
+            var notes = piceDataCtrl.instance.note_data;
+            if (noteId < 0 || noteId >= notes.Count) return new[] { noteId };
+            var note = notes[noteId];
+            string name = note.name;
+            var found = new List<int>();
+            for (int i = 0; i < notes.Count; i++)
+                if (notes[i].type == note.type && notes[i].file_id == note.file_id && notes[i].name == name)
+                    found.Add(i);
+            versions = found.ToArray();
+            foreach (var id in versions) Cache[id] = versions;
+            return versions;
         }
     }
 
     /// <summary>
     /// Historique lié à la partie : tenu en mémoire pendant le jeu, écrit à côté de l'emplacement
     /// lors d'une sauvegarde, relu au chargement, vidé à l'écran titre (nouvelle partie = vierge).
-    /// Clé -> réponses (identifiants de message) déjà vues.
+    /// Clé (jeu|affaire|perso|type|objet) -> réponses déjà vues (fichier:numéro).
     /// </summary>
     internal class PresentHistory
     {
         private readonly string _dir;
-        private Dictionary<string, HashSet<uint>> _data = new Dictionary<string, HashSet<uint>>();
+        private Dictionary<string, HashSet<string>> _data = new Dictionary<string, HashSet<string>>();
         public int Count => _data.Count;
 
         public PresentHistory(string dir)
@@ -109,22 +281,36 @@ namespace PWAAT_QoL
 
         private string SlotFile(int slot) => Path.Combine(_dir, $"slot_{slot}.txt");
 
-        public HashSet<uint> Get(string key) => _data.TryGetValue(key, out var s) ? s : null;
+        public HashSet<string> Get(string key) => _data.TryGetValue(key, out var s) ? s : null;
 
-        public void Add(string key, uint message)
+        public void Add(string key, string reply)
         {
-            if (!_data.TryGetValue(key, out var set)) _data[key] = set = new HashSet<uint>();
-            set.Add(message);
+            if (!_data.TryGetValue(key, out var set)) _data[key] = set = new HashSet<string>();
+            set.Add(reply);
         }
 
-        public void Clear() => _data = new Dictionary<string, HashSet<uint>>();
+        public void Clear() => _data = new Dictionary<string, HashSet<string>>();
 
-        public int ResetChapter(string prefix)
+        /// Retire seulement ce qui a été vu dans le chapitre courant : les autres jours de l'affaire restent connus.
+        public int ResetChapter(string casePrefix, string chapterBase)
         {
-            var keys = new List<string>();
-            foreach (var k in _data.Keys) if (k.StartsWith(prefix)) keys.Add(k);
-            foreach (var k in keys) _data.Remove(k);
-            return keys.Count;
+            int removed = 0;
+            var emptied = new List<string>();
+            foreach (var kv in _data)
+            {
+                if (!kv.Key.StartsWith(casePrefix)) continue;
+                removed += kv.Value.RemoveWhere(reply => InChapter(reply, chapterBase));
+                if (kv.Value.Count == 0) emptied.Add(kv.Key);
+            }
+            foreach (var k in emptied) _data.Remove(k);
+            return removed;
+        }
+
+        private static bool InChapter(string reply, string chapterBase)
+        {
+            int sep = reply.IndexOf(':');
+            if (sep <= 0) return false;
+            return Chapters.Base(reply.Substring(0, sep).TrimEnd('*')) == chapterBase;
         }
 
         public void SaveSlot(int slot)
@@ -132,9 +318,9 @@ namespace PWAAT_QoL
             var lines = new List<string>();
             foreach (var kv in _data)
             {
-                var msgs = new List<string>();
-                foreach (var m in kv.Value) msgs.Add(m.ToString());
-                lines.Add(kv.Key + "=" + string.Join(",", msgs.ToArray()));
+                var replies = new string[kv.Value.Count];
+                kv.Value.CopyTo(replies);
+                lines.Add(kv.Key + "=" + string.Join(",", replies));
             }
             File.WriteAllLines(SlotFile(slot), lines.ToArray());
         }
@@ -148,11 +334,28 @@ namespace PWAAT_QoL
             {
                 int eq = line.LastIndexOf('=');
                 if (eq <= 0) continue;
-                var set = new HashSet<uint>();
-                foreach (var m in line.Substring(eq + 1).Split(','))
-                    if (uint.TryParse(m, out var v)) set.Add(v);
-                _data[line.Substring(0, eq)] = set;
+                string key = line.Substring(0, eq);
+                string chapterBase = MigrateKey(ref key);
+                foreach (var value in line.Substring(eq + 1).Split(','))
+                {
+                    if (value.Length == 0) continue;
+                    Add(key, chapterBase != null ? $"{chapterBase}*:{value}" : value);
+                }
             }
+        }
+
+        /// Ancien format "GS3|9|6|0|115=283" (par chapitre) -> "GS3|c2|6|0|115" + réponse "sc2_2*:283".
+        /// Renvoie le chapitre d'origine, ou null si la ligne est déjà au format actuel.
+        private static string MigrateKey(ref string key)
+        {
+            var parts = key.Split('|');
+            if (parts.Length != 5 || !int.TryParse(parts[1], out int scenario)) return null;
+            TitleId title;
+            try { title = (TitleId)Enum.Parse(typeof(TitleId), parts[0]); }
+            catch (ArgumentException) { return null; }
+            parts[1] = Chapters.CaseId(title, scenario);
+            key = string.Join("|", parts);
+            return Chapters.Base(Chapters.StemOfScenario(title, scenario));
         }
     }
 
@@ -237,11 +440,14 @@ namespace PWAAT_QoL
         {
             if (Ctx.Previewing) return;
             string key = Ctx.Key((int)item, itorhum);
-            var before = Plugin.History.Get(key);
-            string verdict = before == null ? "première fois" : (before.Contains(__result) ? "déjà vue" : "NOUVELLE réponse");
-            Plugin.History.Add(key, __result);
+            string reply = Ctx.ReplyId(__result);
+            var before = Ctx.SeenReplies((int)item, itorhum);
+            string verdict = before == null ? "première fois"
+                : !Ctx.HasDedicatedReply(item, itorhum) ? "réponse par défaut"
+                : ReplyCoverage.IsCovered(GSStatic.global_work_.title, reply, before) ? "déjà vue" : "NOUVELLE réponse";
+            Plugin.History.Add(key, reply);
             if (Plugin.Verbose.Value)
-                Plugin.Log.LogInfo($"[présentation] {key} -> message {__result} ({verdict})");
+                Plugin.Log.LogInfo($"[présentation] {key} -> {reply} ({verdict})");
         }
     }
 
